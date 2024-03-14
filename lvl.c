@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 
     // Create the main window
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Lvl 1");
+    gtk_window_set_title(GTK_WINDOW(window), "LVL 1");
     gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
 
