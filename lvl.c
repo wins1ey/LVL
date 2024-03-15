@@ -29,18 +29,18 @@ int main(int argc, char *argv[]) {
     gtk_grid_attach(GTK_GRID(grid), stack, 0, 1, 1, 1);
 
     // Create pages
-    GtkWidget *page1 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget *library_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *page2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *page3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 
     // Add pages to the stack
-    gtk_stack_add_named(GTK_STACK(stack), page1, "Page 1");
+    gtk_stack_add_named(GTK_STACK(stack), library_page, "Library");
     gtk_stack_add_named(GTK_STACK(stack), page2, "Page 2");
     gtk_stack_add_named(GTK_STACK(stack), page3, "Page 3");
 
     // Create buttons for navigation
-    GtkWidget *button1 = gtk_button_new_with_label("Page 1");
-    g_signal_connect(button1, "clicked", G_CALLBACK(on_button_clicked), stack);
+    GtkWidget *library_button = gtk_button_new_with_label("Library");
+    g_signal_connect(library_button, "clicked", G_CALLBACK(on_button_clicked), stack);
     GtkWidget *button2 = gtk_button_new_with_label("Page 2");
     g_signal_connect(button2, "clicked", G_CALLBACK(on_button_clicked), stack);
     GtkWidget *button3 = gtk_button_new_with_label("Page 3");
@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 
     // Create a horizontal box to hold the navigation buttons
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_box_pack_start(GTK_BOX(hbox), button1, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(hbox), library_button, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(hbox), button2, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(hbox), button3, TRUE, TRUE, 0);
     gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1); // Attach the box to the grid
@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), "730");
 
     // Add the button to Page 1
-    gtk_container_add(GTK_CONTAINER(page1), run_command_button);
+    gtk_container_add(GTK_CONTAINER(library_page), run_command_button);
 
     // Show all widgets
     gtk_widget_show_all(window);
