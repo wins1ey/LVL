@@ -42,9 +42,13 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
-void run_python()
+void run_python(const char *api_key, const char *steam_id)
 {
     Py_Initialize();
+
+    PyObject *pArgs = PyTuple_New(2);
+    PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(api_key)); // API Key
+    PyTuple_SetItem(pArgs, 1, PyUnicode_FromString(steam_id)); // Steam ID
 
     // Load the embedded script as a Python string
     PyObject *py_code_str = Py_BuildValue("y#", embedded_python_py, embedded_python_py_len);
@@ -71,7 +75,7 @@ void run_python()
     // After the script is executed, retrieve and call the function from the global namespace
     PyObject *pFunc = PyDict_GetItemString(global_dict, "main");
     if (pFunc && PyCallable_Check(pFunc)) {
-        PyObject *pValue = PyObject_CallObject(pFunc, NULL);
+        PyObject *pValue = PyObject_CallObject(pFunc, pArgs);
         if (pValue != NULL && PyTuple_Check(pValue) && PyTuple_Size(pValue) == 2) {
             PyObject *pNames = PyTuple_GetItem(pValue, 0);
             PyObject *pIDs = PyTuple_GetItem(pValue, 1);
@@ -107,8 +111,11 @@ void run_python()
 
 int main(int argc, char *argv[])
 {
-
-    run_python();
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <API_KEY> <STEAM_ID>\n", argv[0]);
+        return 1;
+    }
+    run_python(argv[1], argv[2]);
     // Initialize GTK
     gtk_init(&argc, &argv);
 

@@ -1,16 +1,7 @@
-def main():
+def main(api_key, steam_id):
     import urllib.request
     import json
     import os
-    from dotenv import load_dotenv, find_dotenv
-
-    try:
-        load_dotenv(find_dotenv())
-        api_key = os.environ.get('STEAM_API_KEY')
-        steam_id = os.environ.get('STEAM_ID')
-    except Exception as e:
-        print(f"Failed to load environment variables: {e}")
-        exit(1)
 
     base_url = 'http://api.steampowered.com/'
     player_summary_url = f'{base_url}ISteamUser/GetPlayerSummaries/v0002/?key={api_key}&steamids={steam_id}'
