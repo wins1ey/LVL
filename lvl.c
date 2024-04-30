@@ -1,5 +1,10 @@
-#include <gtk/gtk.h>
 #include <stdlib.h>
+
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+#include <gtk/gtk.h>
+
+#include "embedded-python.h"
 
 // Global variable to store the selected Steam ID
 const gchar *selected_steam_id = NULL;
@@ -37,8 +42,67 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
+void run_python()
+{
+    // Ensure Python interpreter is initialized
+    Py_Initialize();
+
+    // Convert the embedded Python code to a Python bytes object
+    PyObject *py_code_bytes = Py_BuildValue("y#", embedded_python_py, embedded_python_py_len);
+    if (!py_code_bytes) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to create Python bytes object.\n");
+        Py_Finalize();
+        return;
+    }
+
+    // Convert bytes to string; necessary for PyRun_StringFlags
+    PyObject *py_code_str = PyUnicode_FromEncodedObject(py_code_bytes, NULL, NULL);
+    Py_DECREF(py_code_bytes);  // Decrement reference of bytes object since it's no longer needed
+    if (!py_code_str) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to convert bytes to string.\n");
+        Py_Finalize();
+        return;
+    }
+
+    // Load '__main__' module and get its dictionary
+    PyObject *main_module = PyImport_AddModule("__main__");
+    if (!main_module) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to get __main__ module.\n");
+        Py_DECREF(py_code_str);
+        Py_Finalize();
+        return;
+    }
+    PyObject *global_dict = PyModule_GetDict(main_module);
+    PyObject *local_dict = PyDict_New();
+    if (!local_dict) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to create local dictionary.\n");
+        Py_DECREF(py_code_str);
+        Py_Finalize();
+        return;
+    }
+
+    // Execute the script
+    PyObject *result = PyRun_String(PyUnicode_AsUTF8(py_code_str), Py_file_input, global_dict, local_dict);
+    Py_DECREF(py_code_str);  // Clean up the string object immediately after use
+    if (!result) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to execute embedded Python script.\n");
+    } else {
+        Py_DECREF(result);
+    }
+
+    Py_DECREF(local_dict);
+    Py_Finalize();
+}
+
 int main(int argc, char *argv[])
 {
+
+    run_python();
     // Initialize GTK
     gtk_init(&argc, &argv);
 
