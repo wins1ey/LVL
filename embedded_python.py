@@ -12,5 +12,5 @@ def main(api_key, steam_id):
         games = data['response'].get('games', [])
 
     game_names = [game['name'] for game in games] if games else []
-    game_ids = [game[str('appid')] for game in games] if games else []
+    game_ids = [game['appid'] for game in games] if games else []
     return game_names, game_ids

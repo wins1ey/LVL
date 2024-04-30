@@ -1,13 +1,53 @@
 #include <stdlib.h>
+#include <pwd.h>
+#include <string.h>
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <gtk/gtk.h>
+#include <sqlite3.h>
 
 #include "embedded-python.h"
+#include "db.h"
 
 // Global variable to store the selected Steam ID
 const gchar *selected_steam_id = NULL;
+
+static void mkdir_p(const char *dir, __mode_t permissions)
+{
+    char tmp[256] = {0};
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp),"%s",dir);
+    len = strlen(tmp);
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+    for (p = tmp + 1; *p; p++)
+    {
+        if (*p == '/') {
+            *p = 0;
+            mkdir(tmp, permissions);
+            *p = '/';
+        }
+    }
+    mkdir(tmp, permissions);
+}
+
+void get_config_path(char* out_path)
+{
+    struct passwd * pw = getpwuid(getuid());
+    char* XDG_CONFIG_HOME = getenv("XDG_CONFIG_HOME");
+    char* base_dir = strcat(pw->pw_dir, "/.config/lvl");
+    if (XDG_CONFIG_HOME != NULL) {
+        char config_dir[PATH_MAX] = {0};
+        strcpy(config_dir, XDG_CONFIG_HOME);
+        strcat(config_dir, "/lvl");
+        strcpy(base_dir, config_dir);
+    }
+    mkdir_p(base_dir, 0700);
+    strcpy(out_path, base_dir);
+}
 
 // Callback function for window destruction
 void on_window_destroy(GtkWidget *widget, gpointer data)
@@ -42,7 +82,7 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
-void run_python(const char *api_key, const char *steam_id)
+void run_python(const char *api_key, const char *steam_id, sqlite3 *db)
 {
     Py_Initialize();
 
@@ -89,10 +129,11 @@ void run_python(const char *api_key, const char *steam_id)
                     PyObject *pName = PyList_GetItem(pNames, i);
                     PyObject *pID = PyList_GetItem(pIDs, i);
 
+                    int game_id = pID ? PyLong_AsLong(pID) : -1;
                     const char *game_name = pName ? PyUnicode_AsUTF8(pName) : "Unknown";
-                    const char *game_id = pID ? PyUnicode_AsUTF8(PyObject_Str(pID)) : "Unknown ID";
 
-                    printf("Game: %s, ID: %s\n", game_name, game_id);
+                    printf("ID: %d, Name: %s\n", game_id, game_name);
+                    insert_game(db, game_id, game_name);
                 }
             } else {
                 PyErr_Print();
@@ -115,7 +156,25 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Usage: %s <API_KEY> <STEAM_ID>\n", argv[0]);
         return 1;
     }
-    run_python(argv[1], argv[2]);
+
+    sqlite3 *db;
+    char *zErr_msg = 0;
+    int rc;
+
+    char db_path[PATH_MAX];
+    get_config_path(db_path);
+    strcat(db_path, "/steam_games.db");
+    rc = sqlite3_open(db_path, &db);
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        return 0;
+    } else {
+        fprintf(stderr, "Opened database successfully\n");
+    }
+
+    create_table(db);
+
+    run_python(argv[1], argv[2], db);
     // Initialize GTK
     gtk_init(&argc, &argv);
 
