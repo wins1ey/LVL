@@ -12,7 +12,7 @@ OBJ_DIR := ./obj
 SRC := $(wildcard $(SRC_DIR)/*.c)
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC))
 
-all: embedded-python.h $(BIN)
+all: steamapi.h $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -23,7 +23,7 @@ $(OBJ): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 $(OBJ_DIR):
 	mkdir -p $@
 
-embedded-python.h: $(SRC_DIR)/embedded_python.py
+steamapi.h: $(SRC_DIR)/steamapi.py
 	xxd -i $< > $(SRC_DIR)/$@
 
 install: all
@@ -33,6 +33,6 @@ uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/$(BIN)
 
 clean:
-	$(RM) -r $(BIN) $(OBJ_DIR) $(SRC_DIR)/embedded-python.h
+	$(RM) -r $(BIN) $(OBJ_DIR) $(SRC_DIR)/steamapi.h
 
 .PHONY: all install uninstall clean

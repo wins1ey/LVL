@@ -3,7 +3,7 @@
 #include <sqlite3.h>
 
 #include "steam.h"
-#include "embedded-python.h"
+#include "steamapi.h"
 #include "db.h"
 
 void run_python(const char *api_key, const char *steam_id, sqlite3 *db)
@@ -15,7 +15,7 @@ void run_python(const char *api_key, const char *steam_id, sqlite3 *db)
     PyTuple_SetItem(pArgs, 1, PyUnicode_FromString(steam_id)); // Steam ID
 
     // Load the embedded script as a Python string
-    PyObject *py_code_str = Py_BuildValue("y#", src_embedded_python_py, src_embedded_python_py_len);
+    PyObject *py_code_str = Py_BuildValue("y#", src_steamapi_py, src_steamapi_py_len);
     if (!py_code_str) {
         PyErr_Print();
         fprintf(stderr, "Failed to create Python code string object.\n");
