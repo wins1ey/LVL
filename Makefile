@@ -6,19 +6,25 @@ LIBS := `pkg-config --libs gtk+-3.0 python3-embed sqlite3`
 DESTDIR :=
 PREFIX := /usr/local
 
-SRC := $(wildcard *.c)
-OBJ := $(SRC:.c=.o)
+SRC_DIR := ./src
+OBJ_DIR := ./obj
+
+SRC := $(wildcard $(SRC_DIR)/*.c)
+OBJ := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC))
 
 all: embedded-python.h $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(OBJ): %.o: %.c
+$(OBJ): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-embedded-python.h: embedded_python.py
-	xxd -i $< > $@
+$(OBJ_DIR):
+	mkdir -p $@
+
+embedded-python.h: $(SRC_DIR)/embedded_python.py
+	xxd -i $< > $(SRC_DIR)/$@
 
 install: all
 	install -Dm755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
@@ -27,6 +33,6 @@ uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/$(BIN)
 
 clean:
-	$(RM) $(BIN) $(OBJ) embedded-python.h
+	$(RM) -r $(BIN) $(OBJ_DIR) $(SRC_DIR)/embedded-python.h
 
 .PHONY: all install uninstall clean
