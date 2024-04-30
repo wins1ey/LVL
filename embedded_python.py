@@ -16,34 +16,10 @@ def main():
     player_summary_url = f'{base_url}ISteamUser/GetPlayerSummaries/v0002/?key={api_key}&steamids={steam_id}'
     owned_games_url = f'{base_url}IPlayerService/GetOwnedGames/v0001/?key={api_key}&steamid={steam_id}&format=json&include_appinfo=true'
 
-    def get_player_summary():
-        with urllib.request.urlopen(player_summary_url) as response:
-            data = json.loads(response.read().decode())
-            players = data['response']['players']
-            if players:
-                return players[0]
-        return None
+    with urllib.request.urlopen(owned_games_url) as response:
+        data = json.loads(response.read().decode())
+        games = data['response'].get('games', [])
 
-    def get_owned_games():
-        with urllib.request.urlopen(owned_games_url) as response:
-            data = json.loads(response.read().decode())
-            games = data['response'].get('games', [])
-            return games
-
-    # Fetch player information
-    player_info = get_player_summary()
-    if player_info:
-        print(f"Player Name: {player_info.get('personaname', 'Unknown')}")
-    else:
-        print("Failed to fetch player information.")
-
-    # Fetch games owned by the user
-    games = get_owned_games()
-    if games:
-        print(f"{player_info.get('personaname', 'The user')} owns {len(games)} games.")
-        for game in games:
-            print(f"{game['name']} - Playtime: {game['playtime_forever']} minutes")
-    else:
-        print("No games found or failed to fetch games.")
-
-main()
+    game_names = [game['name'] for game in games] if games else []
+    game_ids = [game[str('appid')] for game in games] if games else []
+    return game_names, game_ids
