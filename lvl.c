@@ -1,14 +1,41 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 
-// Function declarations
-void on_window_destroy(GtkWidget *widget, gpointer data);
-void on_button_clicked(GtkWidget *widget, gpointer data);
-void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data);
-void on_run_command_clicked(GtkWidget *widget, gpointer data);
-
 // Global variable to store the selected Steam ID
 const gchar *selected_steam_id = NULL;
+
+// Callback function for window destruction
+void on_window_destroy(GtkWidget *widget, gpointer data)
+{
+    gtk_main_quit(); // Quit the GTK main loop when the window is destroyed
+}
+
+// Callback function for button clicks
+void on_button_clicked(GtkWidget *widget, gpointer data)
+{
+    GtkStack *stack = GTK_STACK(data);
+    const gchar *page_name = gtk_button_get_label(GTK_BUTTON(widget));
+    gtk_stack_set_visible_child_name(stack, page_name);
+}
+
+// Callback function for when a game is selected
+void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
+{
+    if (!row) return;
+    selected_steam_id = (const gchar *)g_object_get_data(G_OBJECT(row), "steam_id");
+}
+
+// Callback function for running a shell command with selected game
+void on_run_command_clicked(GtkWidget *widget, gpointer data)
+{
+    if (selected_steam_id != NULL) {
+        char command[100];
+        snprintf(command, sizeof(command), "steam -applaunch %s", selected_steam_id);
+        system(command);
+    } else {
+        g_print("No game selected!\n");
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -90,37 +117,4 @@ int main(int argc, char *argv[])
     gtk_main();
 
     return 0;
-}
-
-// Callback function for window destruction
-void on_window_destroy(GtkWidget *widget, gpointer data)
-{
-    gtk_main_quit(); // Quit the GTK main loop when the window is destroyed
-}
-
-// Callback function for button clicks
-void on_button_clicked(GtkWidget *widget, gpointer data)
-{
-    GtkStack *stack = GTK_STACK(data);
-    const gchar *page_name = gtk_button_get_label(GTK_BUTTON(widget));
-    gtk_stack_set_visible_child_name(stack, page_name);
-}
-
-// Callback function for when a game is selected
-void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
-{
-    if (!row) return;
-    selected_steam_id = (const gchar *)g_object_get_data(G_OBJECT(row), "steam_id");
-}
-
-// Callback function for running a shell command with selected game
-void on_run_command_clicked(GtkWidget *widget, gpointer data)
-{
-    if (selected_steam_id != NULL) {
-        char command[100];
-        snprintf(command, sizeof(command), "steam -applaunch %s", selected_steam_id);
-        system(command);
-    } else {
-        g_print("No game selected!\n");
-    }
 }
