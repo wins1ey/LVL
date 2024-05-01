@@ -23,12 +23,11 @@ void create_table(sqlite3 *db)
     int rc;
     char *sql;
 
-    /* Create SQL statement */
     sql = "CREATE TABLE IF NOT EXISTS games(" \
           "game_id INTEGER PRIMARY KEY," \
-          "game_name TEXT NOT NULL);";
+          "game_name TEXT NOT NULL," \
+          "playtime INTEGER DEFAULT 0);";  // playtime in minutes
 
-    /* Execute SQL statement */
     rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "SQL error: %s\n", zErrMsg);
@@ -38,12 +37,12 @@ void create_table(sqlite3 *db)
     }
 }
 
-void insert_game(sqlite3 *db, int game_id, const char *game_name)
+void insert_game(sqlite3 *db, int game_id, const char *game_name, int playtime)
 {
     char *zErrMsg = 0;
     int rc;
     sqlite3_stmt *stmt;
-    const char *sql = "INSERT OR IGNORE INTO games (game_id, game_name) VALUES (?, ?);";
+    const char *sql = "INSERT OR IGNORE INTO games (game_id, game_name, playtime) VALUES (?, ?, ?);";
 
     // Prepare the statement
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
@@ -56,6 +55,8 @@ void insert_game(sqlite3 *db, int game_id, const char *game_name)
     sqlite3_bind_int(stmt, 1, game_id);
     // Bind string game_name to the second placeholder
     sqlite3_bind_text(stmt, 2, game_name, -1, SQLITE_TRANSIENT);
+    // Bind integer playtime to the third placeholder
+    sqlite3_bind_int(stmt, 3, playtime);
 
     // Execute the statement
     rc = sqlite3_step(stmt);
@@ -78,7 +79,7 @@ void db_fetch_games(const char *db_path, DBRowCallback callback, void *user_data
 {
     sqlite3 *db;
     sqlite3_stmt *stmt;
-    const char *sql = "SELECT game_id, game_name FROM games ORDER BY game_name ASC";
+    const char *sql = "SELECT game_id, game_name, playtime FROM games ORDER BY game_name ASC";
     int rc;
 
     rc = sqlite3_open(db_path, &db);
@@ -98,7 +99,8 @@ void db_fetch_games(const char *db_path, DBRowCallback callback, void *user_data
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int game_id = sqlite3_column_int(stmt, 0);
         const char *game_name = (const char *)sqlite3_column_text(stmt, 1);
-        callback(game_id, game_name, user_data);
+        int playtime = sqlite3_column_int(stmt, 2);
+        callback(game_id, game_name, playtime, user_data);
     }
 
     sqlite3_finalize(stmt);

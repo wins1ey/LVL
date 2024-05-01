@@ -63,12 +63,13 @@ void fetch_data_from_steam_api(const char *api_key, const char *steam_id, sqlite
             cJSON_ArrayForEach(game, games) {
                 cJSON *name = cJSON_GetObjectItemCaseSensitive(game, "name");
                 cJSON *appid = cJSON_GetObjectItemCaseSensitive(game, "appid");
+                cJSON *playtime = cJSON_GetObjectItemCaseSensitive(game, "playtime_forever");  // In minutes
 
                 int game_id = appid ? appid->valueint : -1;
                 const char *game_name = name ? name->valuestring : "Unknown";
+                int game_playtime = playtime ? playtime->valueint : 0;
 
-                printf("ID: %d, Name: %s\n", game_id, game_name);
-                insert_game(db, game_id, game_name);
+                insert_game(db, game_id, game_name, game_playtime);
             }
             cJSON_Delete(json);
         }

@@ -15,7 +15,7 @@ typedef struct {
     GtkWidget *game_list_box;
     GtkWidget *game_info_label;
     GtkWidget *game_title_label;
-    GtkWidget *game_app_id_label;
+    GtkWidget *playtime_label;
     GtkWidget *run_command_button;
     GtkWidget *api_key_entry;
     GtkWidget *steam_id_entry;
@@ -118,7 +118,7 @@ int init_database(Steam *steam, const char *api_key, const char *steam_id)
 }
 
 // Create a single row in the game list
-void create_game_row(int id, const char *name, void *user_data)
+void create_game_row(int id, const char *name, int playtime, void *user_data)
 {
     GtkWidget *game_list_box = (GtkWidget *)user_data;
     GtkWidget *row = gtk_list_box_row_new();
@@ -132,6 +132,7 @@ void create_game_row(int id, const char *name, void *user_data)
     gtk_container_add(GTK_CONTAINER(row), label);
     gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
     g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
+    g_object_set_data(G_OBJECT(row), "playtime", GINT_TO_POINTER(playtime));
 }
 
 void clear_game_list(GtkWidget *game_list_box) {
@@ -158,9 +159,11 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
     if (!row) return;
     AppWidgets *widgets = (AppWidgets *)data;
     gpointer game_id_ptr = g_object_get_data(G_OBJECT(row), "game_id");
+    gpointer playtime_ptr = g_object_get_data(G_OBJECT(row), "playtime");
 
     if (game_id_ptr != NULL) {
         int game_id = GPOINTER_TO_INT(game_id_ptr); // Convert back from pointer to integer
+        int playtime = GPOINTER_TO_INT(playtime_ptr);
         printf("Selected game ID: %d\n", game_id);
         g_free((gchar*)selected_game_id);
         selected_game_id = g_strdup_printf("%d", game_id); // Store game ID as a string for other uses
@@ -170,9 +173,9 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
         gtk_label_set_markup(GTK_LABEL(widgets->game_title_label), formatted_title);
         g_free(formatted_title);
 
-        char *game_app_id = g_strdup_printf("Game App ID: %d", game_id);
-        gtk_label_set_text(GTK_LABEL(widgets->game_app_id_label), game_app_id);
-        g_free(game_app_id);
+        char *formatted_playtime = g_strdup_printf("Playtime: %d minutes", playtime);
+        gtk_label_set_text(GTK_LABEL(widgets->playtime_label), formatted_playtime);
+        g_free(formatted_playtime);
     }
 }
 
@@ -277,8 +280,8 @@ GtkWidget* create_library_page(AppWidgets *appWidgets)
     appWidgets->game_title_label = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(appWidgets->game_title_label), "<span font='16'>Select a game</span>");
     gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_title_label, FALSE, FALSE, 0);
-    appWidgets->game_app_id_label = gtk_label_new(NULL);
-    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_app_id_label, FALSE, FALSE, 0);
+    appWidgets->playtime_label = gtk_label_new(NULL);
+    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->playtime_label, FALSE, FALSE, 0);
 
     // Spacer to push the button to the bottom
     GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
