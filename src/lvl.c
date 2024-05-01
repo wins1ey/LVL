@@ -9,8 +9,7 @@
 #include "db.h"
 #include "steam.h"
 
-// Global variable to store the selected Steam ID
-const gchar *selected_steam_id = NULL;
+const gchar *selected_game_id = NULL;
 
 static void mkdir_p(const char *dir, __mode_t permissions)
 {
@@ -66,19 +65,34 @@ void on_button_clicked(GtkWidget *widget, gpointer data)
 void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
 {
     if (!row) return;
-    selected_steam_id = (const gchar *)g_object_get_data(G_OBJECT(row), "steam_id");
+    gpointer game_id_ptr = g_object_get_data(G_OBJECT(row), "game_id");
+    if (game_id_ptr != NULL) {
+        int game_id = GPOINTER_TO_INT(game_id_ptr); // Convert back from pointer to integer
+        printf("Selected game ID: %d\n", game_id);
+        g_free((gchar*)selected_game_id);
+        selected_game_id = g_strdup_printf("%d", game_id); // Store game ID as a string for other uses
+    }
 }
 
 // Callback function for running a shell command with selected game
 void on_run_command_clicked(GtkWidget *widget, gpointer data)
 {
-    if (selected_steam_id != NULL) {
+    if (selected_game_id != NULL) {
         char command[100];
-        snprintf(command, sizeof(command), "steam -applaunch %s", selected_steam_id);
+        snprintf(command, sizeof(command), "steam -applaunch %s", selected_game_id);
         system(command);
     } else {
         g_print("No game selected!\n");
     }
+}
+
+void create_game_row(int id, const char *name, void *user_data) {
+    GtkWidget *game_list_box = (GtkWidget *)user_data;
+    GtkWidget *row = gtk_list_box_row_new();
+    GtkWidget *label = gtk_label_new(name);
+    gtk_container_add(GTK_CONTAINER(row), label);
+    gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
+    g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
 }
 
 int main(int argc, char *argv[])
@@ -160,16 +174,7 @@ int main(int argc, char *argv[])
     GtkWidget *game_list_box = gtk_list_box_new();
     gtk_container_add(GTK_CONTAINER(library_page), game_list_box);
 
-    // Add some sample games
-    const gchar *game_names[] = {"Game 1", "Game 2", "Game 3"};
-    const gchar *game_steam_ids[] = {"730", "377160", "105600"};
-    for (int i = 0; i < G_N_ELEMENTS(game_names); i++) {
-        GtkWidget *row = gtk_list_box_row_new();
-        GtkWidget *label = gtk_label_new(game_names[i]);
-        gtk_container_add(GTK_CONTAINER(row), label);
-        gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
-        g_object_set_data(G_OBJECT(row), "steam_id", (gpointer)game_steam_ids[i]);
-    }
+    db_fetch_games(db_path, create_game_row, game_list_box);
 
     // Connect the row-selected signal
     g_signal_connect(game_list_box, "row-selected", G_CALLBACK(on_game_selected), NULL);

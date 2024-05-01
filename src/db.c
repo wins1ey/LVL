@@ -73,3 +73,34 @@ void insert_game(sqlite3 *db, int game_id, const char *game_name)
     // Finalize the statement to prevent memory leaks
     sqlite3_finalize(stmt);
 }
+
+void db_fetch_games(const char *db_path, DBRowCallback callback, void *user_data)
+{
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    const char *sql = "SELECT game_id, game_name FROM games ORDER BY game_name ASC";
+    int rc;
+
+    rc = sqlite3_open(db_path, &db);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return;
+    }
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int game_id = sqlite3_column_int(stmt, 0);
+        const char *game_name = (const char *)sqlite3_column_text(stmt, 1);
+        callback(game_id, game_name, user_data);
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
