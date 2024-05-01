@@ -10,6 +10,8 @@
 #include "steam.h"
 #include "validation.h"
 
+#define VERSION "1.0.0"
+
 typedef struct {
     GtkWidget *window;
     GtkWidget *stack;
@@ -253,6 +255,41 @@ GtkWidget* create_navigation_buttons(GtkWidget *stack)
     return hbox;
 }
 
+GtkWidget* create_about_page()
+{
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_container_set_border_width(GTK_CONTAINER(vbox), 10);
+
+    // Title
+    GtkWidget *title_label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(title_label), "<span font='18' weight='bold'>LVL - Linux Video Game Launcher</span>");
+    gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
+
+    // Version
+    char version_text[32], major_version[8];
+    const char *dot_position = strchr(VERSION, '.');
+    strcpy(major_version, VERSION);
+    major_version[dot_position - VERSION] = '\0';
+    sprintf(version_text, "Version: %s (LVL %s)", VERSION, major_version);
+    GtkWidget *version_label = gtk_label_new(version_text);
+    gtk_box_pack_start(GTK_BOX(vbox), version_label, FALSE, FALSE, 0);
+
+    // Description
+    GtkWidget *description_label = gtk_label_new(
+        "LVL is designed to manage and launch your video games on Linux "
+        "effortlessly. It integrates with the Steam API to fetch your game "
+        "library and allows you to launch games directly from the application."
+    );
+    gtk_label_set_line_wrap(GTK_LABEL(description_label), TRUE);
+    gtk_box_pack_start(GTK_BOX(vbox), description_label, FALSE, FALSE, 0);
+
+    // Author
+    GtkWidget *author_label = gtk_label_new("Developed by: wins1ey");
+    gtk_box_pack_start(GTK_BOX(vbox), author_label, FALSE, FALSE, 0);
+
+    return vbox;
+}
+
 GtkWidget* create_settings_page(AppWidgets *appWidgets)
 {
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -324,7 +361,7 @@ GtkWidget* create_stack_with_pages(AppWidgets *appWidgets)
     GtkWidget *settings_page = create_settings_page(appWidgets);
     gtk_stack_add_named(GTK_STACK(stack), settings_page, "Settings");
 
-    GtkWidget *about_page = gtk_label_new("About page content here.");
+    GtkWidget *about_page = create_about_page();
     gtk_stack_add_named(GTK_STACK(stack), about_page, "About");
 
     appWidgets->stack = stack;
