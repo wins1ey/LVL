@@ -15,12 +15,16 @@ typedef struct {
     GtkWidget *game_list_box;
     GtkWidget *game_info_label;
     GtkWidget *run_command_button;
+    GtkWidget *api_key_entry;
+    GtkWidget *steam_id_entry;
 } AppWidgets;
 
 typedef struct {
     sqlite3 *db;
     char db_path[PATH_MAX];
-} SteamDB;
+} Steam;
+
+Steam steam;
 
 const gchar *selected_game_id = NULL;
 
@@ -46,7 +50,8 @@ static void mkdir_p(const char *dir, __mode_t permissions)
     mkdir(tmp, permissions);
 }
 
-void open_uri(const char *action) {
+void open_uri(const char *action)
+{
     char command[256];
 
     snprintf(command, sizeof(command), "xdg-open %s", action);
@@ -55,6 +60,30 @@ void open_uri(const char *action) {
     if (system(command) == -1) {
         fprintf(stderr, "Failed to execute command\n");
     }
+}
+
+// Function to write the Steam API key and Steam ID to the configuration file
+void write_config(const char *config_path, const char *api_key, const char *steam_id)
+{
+    FILE *file = fopen(config_path, "w");
+    if (file) {
+        fprintf(file, "%s\n%s\n", api_key, steam_id);
+        fclose(file);
+    }
+}
+
+// Function to read the Steam API key and Steam ID from the configuration file
+int read_config(const char *config_path, char *api_key, char *steam_id)
+{
+    FILE *file = fopen(config_path, "r");
+    if (file) {
+        if (fscanf(file, "%255s\n%255s\n", api_key, steam_id) == 2) {
+            fclose(file);
+            return 1;
+        }
+        fclose(file);
+    }
+    return 0;
 }
 
 // Retrieves or sets up the path to the configuration directory
@@ -70,6 +99,41 @@ void get_config_path(char *out_path)
         strcat(out_path, "/.config/lvl");
     }
     mkdir_p(out_path, 0700);
+}
+
+// Initialize the database and load data
+int init_database(Steam *steam, const char *api_key, const char *steam_id)
+{
+    get_config_path(steam->db_path);
+    strcat(steam->db_path, "/steam_games.db");
+    if (sqlite3_open(steam->db_path, &steam->db)) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(steam->db));
+        return 0;
+    }
+    create_table(steam->db);
+    fetch_data_from_steam_api(api_key, steam_id, steam->db);
+    return 1;
+}
+
+// Create a single row in the game list
+void create_game_row(int id, const char *name, void *user_data)
+{
+    GtkWidget *game_list_box = (GtkWidget *)user_data;
+    GtkWidget *row = gtk_list_box_row_new();
+    GtkWidget *label = gtk_label_new(name);
+
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0); // Align text to the left
+    gtk_widget_set_hexpand(label, FALSE); // Do not expand horizontally
+    gtk_widget_set_halign(label, GTK_ALIGN_FILL); // Fill the horizontal space without expanding
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // Ellipsize text at the end if it does not fit
+
+    gtk_container_add(GTK_CONTAINER(row), label);
+    gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
+    g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
+}
+
+void clear_game_list(GtkWidget *game_list_box) {
+    gtk_container_foreach(GTK_CONTAINER(game_list_box), (GtkCallback)gtk_widget_destroy, NULL);
 }
 
 // Callback to quit GTK main loop
@@ -111,35 +175,30 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
-// Create a single row in the game list
-void create_game_row(int id, const char *name, void *user_data)
+void on_save_settings_clicked(GtkWidget *widget, gpointer data)
 {
-    GtkWidget *game_list_box = (GtkWidget *)user_data;
-    GtkWidget *row = gtk_list_box_row_new();
-    GtkWidget *label = gtk_label_new(name);
+    AppWidgets *widgets = (AppWidgets *)data;
+    const char *api_key = gtk_entry_get_text(GTK_ENTRY(widgets->api_key_entry));
+    const char *steam_id = gtk_entry_get_text(GTK_ENTRY(widgets->steam_id_entry));
 
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0); // Align text to the left
-    gtk_widget_set_hexpand(label, FALSE); // Do not expand horizontally
-    gtk_widget_set_halign(label, GTK_ALIGN_FILL); // Fill the horizontal space without expanding
-    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // Ellipsize text at the end if it does not fit
-                                                                    //
-    gtk_container_add(GTK_CONTAINER(row), label);
-    gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
-    g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
-}
+    char config_path[PATH_MAX];
+    get_config_path(config_path);
+    strcat(config_path, "/config.txt");
 
-// Initialize the database and load data
-int init_database(SteamDB *steam, const char *api_key, const char *steam_id)
-{
-    get_config_path(steam->db_path);
-    strcat(steam->db_path, "/steam_games.db");
-    if (sqlite3_open(steam->db_path, &steam->db)) {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(steam->db));
-        return 0;
+    write_config(config_path, api_key, steam_id);
+
+    // Re-initialize the database with new API key and ID
+    if (!init_database(&steam, api_key, steam_id)) {
+        g_print("Failed to initialize database with new settings\n");
+        return;
     }
-    create_table(steam->db);
-    fetch_data_from_steam_api(api_key, steam_id, steam->db);
-    return 1;
+
+    // Clear the existing list of games
+    clear_game_list(widgets->game_list_box);
+
+    // Fetch games with new API key and Steam ID and repopulate the list
+    db_fetch_games(steam.db_path, create_game_row, widgets->game_list_box);
+    gtk_widget_show_all(widgets->window);
 }
 
 // Initialize GTK and configure widgets
@@ -165,7 +224,31 @@ GtkWidget* create_navigation_buttons(GtkWidget *stack)
     return hbox;
 }
 
-GtkWidget* create_library_page(GtkWidget *stack, AppWidgets *appWidgets)
+GtkWidget* create_settings_page(AppWidgets *appWidgets)
+{
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    GtkWidget *api_key_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(api_key_entry), "Enter Steam API Key");
+    gtk_box_pack_start(GTK_BOX(vbox), api_key_entry, FALSE, FALSE, 0);
+
+    GtkWidget *steam_id_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(steam_id_entry), "Enter Steam ID");
+    gtk_box_pack_start(GTK_BOX(vbox), steam_id_entry, FALSE, FALSE, 0);
+
+    GtkWidget *save_button = gtk_button_new_with_label("Save Settings");
+    gtk_box_pack_start(GTK_BOX(vbox), save_button, FALSE, FALSE, 0);
+
+    // Save callback
+    g_signal_connect(save_button, "clicked", G_CALLBACK(on_save_settings_clicked), appWidgets);
+
+    appWidgets->api_key_entry = api_key_entry;
+    appWidgets->steam_id_entry = steam_id_entry;
+
+    return vbox;
+}
+
+GtkWidget* create_library_page(AppWidgets *appWidgets)
 {
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     appWidgets->game_list_box = gtk_list_box_new();
@@ -193,10 +276,10 @@ GtkWidget* create_stack_with_pages(AppWidgets *appWidgets)
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT);
     gtk_stack_set_transition_duration(GTK_STACK(stack), 500);
 
-    GtkWidget *library_page = create_library_page(stack, appWidgets);
+    GtkWidget *library_page = create_library_page(appWidgets);
     gtk_stack_add_named(GTK_STACK(stack), library_page, "Library");
 
-    GtkWidget *settings_page = gtk_label_new("Settings page content here.");
+    GtkWidget *settings_page = create_settings_page(appWidgets);
     gtk_stack_add_named(GTK_STACK(stack), settings_page, "Settings");
 
     GtkWidget *about_page = gtk_label_new("About page content here.");
@@ -208,17 +291,13 @@ GtkWidget* create_stack_with_pages(AppWidgets *appWidgets)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <API_KEY> <STEAM_ID>\n", argv[0]);
-        return 1;
-    }
-
-    SteamDB steam;
-    if (!init_database(&steam, argv[1], argv[2])) {
-        return 0;
-    }
-
     gtk_init(&argc, &argv);
+
+    char api_key[256], steam_id[256];
+    char config_path[PATH_MAX];
+    get_config_path(config_path);
+    sprintf(steam.db_path, "%s/steam_games.db", config_path);
+    strcat(config_path, "/config.txt");
 
     AppWidgets appWidgets;
     appWidgets.window = create_main_window();
@@ -231,7 +310,12 @@ int main(int argc, char *argv[])
 
     gtk_container_add(GTK_CONTAINER(appWidgets.window), vbox);
 
-    db_fetch_games(steam.db_path, create_game_row, appWidgets.game_list_box);
+    if (read_config(config_path, api_key, steam_id)) {
+        db_fetch_games(steam.db_path, create_game_row, appWidgets.game_list_box);
+    } else {
+        GtkWidget *label = gtk_label_new("Please enter your Steam API key and Steam ID in the settings.");
+        gtk_container_add(GTK_CONTAINER(appWidgets.window), label);
+    }
 
     gtk_widget_show_all(appWidgets.window);
     gtk_main();
