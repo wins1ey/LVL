@@ -86,10 +86,17 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
-void create_game_row(int id, const char *name, void *user_data) {
+void create_game_row(int id, const char *name, void *user_data)
+{
     GtkWidget *game_list_box = (GtkWidget *)user_data;
     GtkWidget *row = gtk_list_box_row_new();
+
     GtkWidget *label = gtk_label_new(name);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0); // Align text to the left
+    gtk_widget_set_hexpand(label, FALSE); // Do not expand horizontally
+    gtk_widget_set_halign(label, GTK_ALIGN_FILL); // Fill the horizontal space without expanding
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // Ellipsize text at the end if it does not fit
+
     gtk_container_add(GTK_CONTAINER(row), label);
     gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
     g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
@@ -120,67 +127,74 @@ int main(int argc, char *argv[])
     create_table(db);
 
     fetch_data_from_steam_api(argv[1], argv[2], db);
+
     // Initialize GTK
     gtk_init(&argc, &argv);
 
     // Create the main window
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "LVL 1");
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
+    gtk_window_set_title(GTK_WINDOW(window), "Game Library");
+    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
 
-    // Connect the destroy signal
     g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
 
     // Create a grid to arrange widgets
     GtkWidget *grid = gtk_grid_new();
     gtk_container_add(GTK_CONTAINER(window), grid);
 
-    // Create a stack to hold different pages
+    // Create a stack for switching between pages
     GtkWidget *stack = gtk_stack_new();
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT);
     gtk_grid_attach(GTK_GRID(grid), stack, 0, 1, 1, 1);
 
-    // Create pages
     GtkWidget *library_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *page2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *page3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 
-    // Add pages to the stack
     gtk_stack_add_named(GTK_STACK(stack), library_page, "Library");
     gtk_stack_add_named(GTK_STACK(stack), page2, "Page 2");
     gtk_stack_add_named(GTK_STACK(stack), page3, "Page 3");
 
-    // Create buttons for navigation
+    // Navigation buttons
     GtkWidget *library_button = gtk_button_new_with_label("Library");
-    g_signal_connect(library_button, "clicked", G_CALLBACK(on_button_clicked), stack);
     GtkWidget *button2 = gtk_button_new_with_label("Page 2");
-    g_signal_connect(button2, "clicked", G_CALLBACK(on_button_clicked), stack);
     GtkWidget *button3 = gtk_button_new_with_label("Page 3");
+
+    g_signal_connect(library_button, "clicked", G_CALLBACK(on_button_clicked), stack);
+    g_signal_connect(button2, "clicked", G_CALLBACK(on_button_clicked), stack);
     g_signal_connect(button3, "clicked", G_CALLBACK(on_button_clicked), stack);
 
-    // Create a horizontal box to hold the navigation buttons
+    // Horizontal box for navigation buttons
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(hbox), library_button, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(hbox), button2, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(hbox), button3, TRUE, TRUE, 0);
-    gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1); // Attach the box to the grid
+    gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1);
 
-    // Create a button for running a shell command
-    GtkWidget *run_command_button = gtk_button_new_with_label("Play");
-    g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
+    // Setup the library page with a paned window
+    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 600); // Ensure a minimum width
 
-    // Create a vertical box to hold the game list
     GtkWidget *game_list_box = gtk_list_box_new();
-    gtk_container_add(GTK_CONTAINER(library_page), game_list_box);
+    gtk_widget_set_vexpand(game_list_box, TRUE); // Ensure it expands vertically
+    gtk_container_add(GTK_CONTAINER(scrolled_window), game_list_box);
 
-    db_fetch_games(db_path, create_game_row, game_list_box);
+    gtk_paned_pack1(GTK_PANED(paned), scrolled_window, TRUE, TRUE); // Both resize and shrink set to TRUE
 
-    // Connect the row-selected signal
+    GtkWidget *play_button_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget *run_command_button = gtk_button_new_with_label("Play");
+    gtk_box_pack_start(GTK_BOX(play_button_box), run_command_button, FALSE, FALSE, 0);
+    gtk_paned_pack2(GTK_PANED(paned), play_button_box, FALSE, TRUE);
+
+    gtk_box_pack_start(GTK_BOX(library_page), paned, TRUE, TRUE, 0); // Ensure the library page expands fully
+
+    g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
     g_signal_connect(game_list_box, "row-selected", G_CALLBACK(on_game_selected), NULL);
 
-    // Add the button to Page 1
-    gtk_container_add(GTK_CONTAINER(library_page), run_command_button);
+    db_fetch_games(db_path, create_game_row, game_list_box);
 
     // Show all widgets
     gtk_widget_show_all(window);
