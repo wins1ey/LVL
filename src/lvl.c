@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
 
     create_table(db);
 
-    run_python(argv[1], argv[2], db);
+    fetch_data_from_steam_api(argv[1], argv[2], db);
     // Initialize GTK
     gtk_init(&argc, &argv);
 
