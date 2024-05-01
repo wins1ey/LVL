@@ -9,8 +9,20 @@
 #include "db.h"
 #include "steam.h"
 
+typedef struct {
+    GtkWidget *window;
+    GtkWidget *stack;
+    GtkWidget *game_list_box;
+} AppWidgets;
+
+typedef struct {
+    sqlite3 *db;
+    char db_path[PATH_MAX];
+} SteamDB;
+
 const gchar *selected_game_id = NULL;
 
+// Function to create necessary directories for the app configuration
 static void mkdir_p(const char *dir, __mode_t permissions)
 {
     char tmp[256] = {0};
@@ -32,28 +44,28 @@ static void mkdir_p(const char *dir, __mode_t permissions)
     mkdir(tmp, permissions);
 }
 
-void get_config_path(char* out_path)
+// Retrieves or sets up the path to the configuration directory
+void get_config_path(char *out_path)
 {
-    struct passwd * pw = getpwuid(getuid());
-    char* XDG_CONFIG_HOME = getenv("XDG_CONFIG_HOME");
-    char* base_dir = strcat(pw->pw_dir, "/.config/lvl");
-    if (XDG_CONFIG_HOME != NULL) {
-        char config_dir[PATH_MAX] = {0};
-        strcpy(config_dir, XDG_CONFIG_HOME);
-        strcat(config_dir, "/lvl");
-        strcpy(base_dir, config_dir);
+    struct passwd *pw = getpwuid(getuid());
+    const char *XDG_CONFIG_HOME = getenv("XDG_CONFIG_HOME");
+    if (XDG_CONFIG_HOME) {
+        strcpy(out_path, XDG_CONFIG_HOME);
+        strcat(out_path, "/lvl");
+    } else {
+        strcpy(out_path, pw->pw_dir);
+        strcat(out_path, "/.config/lvl");
     }
-    mkdir_p(base_dir, 0700);
-    strcpy(out_path, base_dir);
+    mkdir_p(out_path, 0700);
 }
 
-// Callback function for window destruction
+// Callback to quit GTK main loop
 void on_window_destroy(GtkWidget *widget, gpointer data)
 {
-    gtk_main_quit(); // Quit the GTK main loop when the window is destroyed
+    gtk_main_quit();
 }
 
-// Callback function for button clicks
+// Navigation button callback
 void on_button_clicked(GtkWidget *widget, gpointer data)
 {
     GtkStack *stack = GTK_STACK(data);
@@ -61,7 +73,7 @@ void on_button_clicked(GtkWidget *widget, gpointer data)
     gtk_stack_set_visible_child_name(stack, page_name);
 }
 
-// Callback function for when a game is selected
+// Game selection callback
 void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
 {
     if (!row) return;
@@ -74,10 +86,10 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
     }
 }
 
-// Callback function for running a shell command with selected game
+// Execute a command for the selected game
 void on_run_command_clicked(GtkWidget *widget, gpointer data)
 {
-    if (selected_game_id != NULL) {
+    if (selected_game_id) {
         char command[100];
         snprintf(command, sizeof(command), "steam -applaunch %s", selected_game_id);
         system(command);
@@ -86,20 +98,89 @@ void on_run_command_clicked(GtkWidget *widget, gpointer data)
     }
 }
 
+// Create a single row in the game list
 void create_game_row(int id, const char *name, void *user_data)
 {
     GtkWidget *game_list_box = (GtkWidget *)user_data;
     GtkWidget *row = gtk_list_box_row_new();
-
     GtkWidget *label = gtk_label_new(name);
+
     gtk_label_set_xalign(GTK_LABEL(label), 0.0); // Align text to the left
     gtk_widget_set_hexpand(label, FALSE); // Do not expand horizontally
     gtk_widget_set_halign(label, GTK_ALIGN_FILL); // Fill the horizontal space without expanding
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // Ellipsize text at the end if it does not fit
-
+                                                                    //
     gtk_container_add(GTK_CONTAINER(row), label);
     gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
     g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
+}
+
+// Initialize the database and load data
+int init_database(SteamDB *steam, const char *api_key, const char *steam_id)
+{
+    get_config_path(steam->db_path);
+    strcat(steam->db_path, "/steam_games.db");
+    if (sqlite3_open(steam->db_path, &steam->db)) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(steam->db));
+        return 0;
+    }
+    create_table(steam->db);
+    fetch_data_from_steam_api(api_key, steam_id, steam->db);
+    return 1;
+}
+
+// Initialize GTK and configure widgets
+GtkWidget* create_main_window()
+{
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "LVL");
+    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
+    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
+    return window;
+}
+
+GtkWidget* create_navigation_buttons(GtkWidget *stack)
+{
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    const char *labels[] = {"Library", "Page 2", "Page 3"};
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *button = gtk_button_new_with_label(labels[i]);
+        gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
+        g_signal_connect(button, "clicked", G_CALLBACK(on_button_clicked), stack);
+    }
+    return hbox;
+}
+
+GtkWidget* create_stack_with_pages()
+{
+    GtkWidget *stack = gtk_stack_new();
+    gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT);
+    const char *page_names[] = {"Library", "Page 2", "Page 3"};
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+        gtk_stack_add_named(GTK_STACK(stack), page, page_names[i]);
+    }
+    return stack;
+}
+
+void setup_library_page(GtkWidget *library_page, GtkWidget *game_list_box)
+{
+    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 600);
+    gtk_container_add(GTK_CONTAINER(scrolled_window), game_list_box);
+    gtk_paned_pack1(GTK_PANED(paned), scrolled_window, TRUE, TRUE);
+
+    GtkWidget *play_button_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget *run_command_button = gtk_button_new_with_label("Play");
+    gtk_box_pack_start(GTK_BOX(play_button_box), run_command_button, FALSE, FALSE, 0);
+    gtk_paned_pack2(GTK_PANED(paned), play_button_box, FALSE, TRUE);
+
+    gtk_box_pack_start(GTK_BOX(library_page), paned, TRUE, TRUE, 0);
+    g_signal_connect(game_list_box, "row-selected", G_CALLBACK(on_game_selected), NULL);
+    g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
 }
 
 int main(int argc, char *argv[])
@@ -109,98 +190,31 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    sqlite3 *db;
-    char *zErr_msg = 0;
-    int rc;
-
-    char db_path[PATH_MAX];
-    get_config_path(db_path);
-    strcat(db_path, "/steam_games.db");
-    rc = sqlite3_open(db_path, &db);
-    if (rc) {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+    SteamDB steam;
+    if (!init_database(&steam, argv[1], argv[2])) {
         return 0;
-    } else {
-        fprintf(stderr, "Opened database successfully\n");
     }
-
-    create_table(db);
-
-    fetch_data_from_steam_api(argv[1], argv[2], db);
-
-    // Initialize GTK
     gtk_init(&argc, &argv);
+    GtkWidget *window = create_main_window();
+    GtkWidget *stack = create_stack_with_pages();
+    GtkWidget *hbox = create_navigation_buttons(stack);
+    GtkWidget *library_page = gtk_stack_get_child_by_name(GTK_STACK(stack), "Library");
+    GtkWidget *game_list_box = gtk_list_box_new();
+    gtk_widget_set_vexpand(game_list_box, TRUE);
+    setup_library_page(library_page, game_list_box);
 
-    // Create the main window
-    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Game Library");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-
-    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
-
-    // Create a grid to arrange widgets
+    // Set up the grid and pack everything
     GtkWidget *grid = gtk_grid_new();
     gtk_container_add(GTK_CONTAINER(window), grid);
-
-    // Create a stack for switching between pages
-    GtkWidget *stack = gtk_stack_new();
-    gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT);
+    gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), stack, 0, 1, 1, 1);
 
-    GtkWidget *library_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    GtkWidget *page2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    GtkWidget *page3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    db_fetch_games(steam.db_path, create_game_row, game_list_box);
 
-    gtk_stack_add_named(GTK_STACK(stack), library_page, "Library");
-    gtk_stack_add_named(GTK_STACK(stack), page2, "Page 2");
-    gtk_stack_add_named(GTK_STACK(stack), page3, "Page 3");
-
-    // Navigation buttons
-    GtkWidget *library_button = gtk_button_new_with_label("Library");
-    GtkWidget *button2 = gtk_button_new_with_label("Page 2");
-    GtkWidget *button3 = gtk_button_new_with_label("Page 3");
-
-    g_signal_connect(library_button, "clicked", G_CALLBACK(on_button_clicked), stack);
-    g_signal_connect(button2, "clicked", G_CALLBACK(on_button_clicked), stack);
-    g_signal_connect(button3, "clicked", G_CALLBACK(on_button_clicked), stack);
-
-    // Horizontal box for navigation buttons
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_box_pack_start(GTK_BOX(hbox), library_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox), button2, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox), button3, TRUE, TRUE, 0);
-    gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1);
-
-    // Setup the library page with a paned window
-    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 600); // Ensure a minimum width
-
-    GtkWidget *game_list_box = gtk_list_box_new();
-    gtk_widget_set_vexpand(game_list_box, TRUE); // Ensure it expands vertically
-    gtk_container_add(GTK_CONTAINER(scrolled_window), game_list_box);
-
-    gtk_paned_pack1(GTK_PANED(paned), scrolled_window, TRUE, TRUE); // Both resize and shrink set to TRUE
-
-    GtkWidget *play_button_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    GtkWidget *run_command_button = gtk_button_new_with_label("Play");
-    gtk_box_pack_start(GTK_BOX(play_button_box), run_command_button, FALSE, FALSE, 0);
-    gtk_paned_pack2(GTK_PANED(paned), play_button_box, FALSE, TRUE);
-
-    gtk_box_pack_start(GTK_BOX(library_page), paned, TRUE, TRUE, 0); // Ensure the library page expands fully
-
-    g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
-    g_signal_connect(game_list_box, "row-selected", G_CALLBACK(on_game_selected), NULL);
-
-    db_fetch_games(db_path, create_game_row, game_list_box);
-
-    // Show all widgets
     gtk_widget_show_all(window);
-
-    // Start the GTK main loop
     gtk_main();
+
+    sqlite3_close(steam.db);
 
     return 0;
 }
