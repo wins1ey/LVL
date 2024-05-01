@@ -8,6 +8,7 @@
 
 #include "db.h"
 #include "steam.h"
+#include "validation.h"
 
 typedef struct {
     GtkWidget *window;
@@ -197,6 +198,18 @@ void on_save_settings_clicked(GtkWidget *widget, gpointer data)
     const char *api_key = gtk_entry_get_text(GTK_ENTRY(widgets->api_key_entry));
     const char *steam_id = gtk_entry_get_text(GTK_ENTRY(widgets->steam_id_entry));
 
+    if (!validate_steam_credentials(api_key, steam_id)) {
+        // If validation fails, show an error message
+        GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(widgets->window),
+                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                   GTK_MESSAGE_ERROR,
+                                                   GTK_BUTTONS_CLOSE,
+                                                   "Invalid Steam API Key or Steam ID. Please check your input.");
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        return; // Stop further processing
+    }
+
     char config_path[PATH_MAX];
     get_config_path(config_path);
     strcat(config_path, "/config.txt");
@@ -341,9 +354,6 @@ int main(int argc, char *argv[])
 
     if (read_config(config_path, api_key, steam_id)) {
         db_fetch_games(steam.db_path, create_game_row, appWidgets.game_list_box);
-    } else {
-        GtkWidget *label = gtk_label_new("Please enter your Steam API key and Steam ID in the settings.");
-        gtk_container_add(GTK_CONTAINER(appWidgets.window), label);
     }
 
     gtk_widget_show_all(appWidgets.window);
