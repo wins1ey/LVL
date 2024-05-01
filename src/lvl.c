@@ -13,6 +13,8 @@ typedef struct {
     GtkWidget *window;
     GtkWidget *stack;
     GtkWidget *game_list_box;
+    GtkWidget *game_info_label;
+    GtkWidget *run_command_button;
 } AppWidgets;
 
 typedef struct {
@@ -143,8 +145,8 @@ GtkWidget* create_main_window()
 GtkWidget* create_navigation_buttons(GtkWidget *stack)
 {
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    const char *labels[] = {"Library", "Page 2", "Page 3"};
-    for (int i = 0; i < 3; i++) {
+    const char *labels[] = {"Library", "Settings", "About"};
+    for (int i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
         GtkWidget *button = gtk_button_new_with_label(labels[i]);
         gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
         g_signal_connect(button, "clicked", G_CALLBACK(on_button_clicked), stack);
@@ -152,35 +154,45 @@ GtkWidget* create_navigation_buttons(GtkWidget *stack)
     return hbox;
 }
 
-GtkWidget* create_stack_with_pages()
+GtkWidget* create_library_page(GtkWidget *stack, AppWidgets *appWidgets)
+{
+    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    appWidgets->game_list_box = gtk_list_box_new();
+    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add(GTK_CONTAINER(scrolled_window), appWidgets->game_list_box);
+    gtk_paned_add1(GTK_PANED(paned), scrolled_window);
+
+    GtkWidget *info_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    appWidgets->game_info_label = gtk_label_new("Select a game from the list.");
+    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_info_label, TRUE, TRUE, 0);
+    appWidgets->run_command_button = gtk_button_new_with_label("Play");
+    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->run_command_button, FALSE, FALSE, 0);
+    gtk_paned_add2(GTK_PANED(paned), info_vbox);
+
+    g_signal_connect(appWidgets->game_list_box, "row-selected", G_CALLBACK(on_game_selected), appWidgets);
+    g_signal_connect(appWidgets->run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
+
+    return paned;
+}
+
+GtkWidget* create_stack_with_pages(AppWidgets *appWidgets)
 {
     GtkWidget *stack = gtk_stack_new();
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT);
-    const char *page_names[] = {"Library", "Page 2", "Page 3"};
-    for (int i = 0; i < 3; i++) {
-        GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-        gtk_stack_add_named(GTK_STACK(stack), page, page_names[i]);
-    }
+    gtk_stack_set_transition_duration(GTK_STACK(stack), 500);
+
+    GtkWidget *library_page = create_library_page(stack, appWidgets);
+    gtk_stack_add_named(GTK_STACK(stack), library_page, "Library");
+
+    GtkWidget *settings_page = gtk_label_new("Settings page content here.");
+    gtk_stack_add_named(GTK_STACK(stack), settings_page, "Settings");
+
+    GtkWidget *about_page = gtk_label_new("About page content here.");
+    gtk_stack_add_named(GTK_STACK(stack), about_page, "About");
+
+    appWidgets->stack = stack;
     return stack;
-}
-
-void setup_library_page(GtkWidget *library_page, GtkWidget *game_list_box)
-{
-    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 600);
-    gtk_container_add(GTK_CONTAINER(scrolled_window), game_list_box);
-    gtk_paned_pack1(GTK_PANED(paned), scrolled_window, TRUE, TRUE);
-
-    GtkWidget *play_button_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    GtkWidget *run_command_button = gtk_button_new_with_label("Play");
-    gtk_box_pack_start(GTK_BOX(play_button_box), run_command_button, FALSE, FALSE, 0);
-    gtk_paned_pack2(GTK_PANED(paned), play_button_box, FALSE, TRUE);
-
-    gtk_box_pack_start(GTK_BOX(library_page), paned, TRUE, TRUE, 0);
-    g_signal_connect(game_list_box, "row-selected", G_CALLBACK(on_game_selected), NULL);
-    g_signal_connect(run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
 }
 
 int main(int argc, char *argv[])
@@ -194,24 +206,23 @@ int main(int argc, char *argv[])
     if (!init_database(&steam, argv[1], argv[2])) {
         return 0;
     }
+
     gtk_init(&argc, &argv);
-    GtkWidget *window = create_main_window();
-    GtkWidget *stack = create_stack_with_pages();
+
+    AppWidgets appWidgets;
+    appWidgets.window = create_main_window();
+    GtkWidget *stack = create_stack_with_pages(&appWidgets);
     GtkWidget *hbox = create_navigation_buttons(stack);
-    GtkWidget *library_page = gtk_stack_get_child_by_name(GTK_STACK(stack), "Library");
-    GtkWidget *game_list_box = gtk_list_box_new();
-    gtk_widget_set_vexpand(game_list_box, TRUE);
-    setup_library_page(library_page, game_list_box);
 
-    // Set up the grid and pack everything
-    GtkWidget *grid = gtk_grid_new();
-    gtk_container_add(GTK_CONTAINER(window), grid);
-    gtk_grid_attach(GTK_GRID(grid), hbox, 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), stack, 0, 1, 1, 1);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), stack, TRUE, TRUE, 0);
 
-    db_fetch_games(steam.db_path, create_game_row, game_list_box);
+    gtk_container_add(GTK_CONTAINER(appWidgets.window), vbox);
 
-    gtk_widget_show_all(window);
+    db_fetch_games(steam.db_path, create_game_row, appWidgets.game_list_box);
+
+    gtk_widget_show_all(appWidgets.window);
     gtk_main();
 
     sqlite3_close(steam.db);
