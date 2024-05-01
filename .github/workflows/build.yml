@@ -15,8 +15,8 @@ jobs:
           sudo apt -y update
           sudo apt -y install libgtk-3-dev libsqlite3-dev libcjson-dev libcurl4-openssl-dev
 
-      - name: "Run make clean and make"
-        run: make clean && make -j
+      - name: "Run make"
+        run: make -j
 
       - name: Set Build number
         shell: bash
