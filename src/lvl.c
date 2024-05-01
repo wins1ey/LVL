@@ -46,6 +46,17 @@ static void mkdir_p(const char *dir, __mode_t permissions)
     mkdir(tmp, permissions);
 }
 
+void open_uri(const char *action) {
+    char command[256];
+
+    snprintf(command, sizeof(command), "xdg-open %s", action);
+
+    printf("Executing command: %s\n", command);
+    if (system(command) == -1) {
+        fprintf(stderr, "Failed to execute command\n");
+    }
+}
+
 // Retrieves or sets up the path to the configuration directory
 void get_config_path(char *out_path)
 {
@@ -92,9 +103,9 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
 void on_run_command_clicked(GtkWidget *widget, gpointer data)
 {
     if (selected_game_id) {
-        char command[100];
-        snprintf(command, sizeof(command), "steam -applaunch %s", selected_game_id);
-        system(command);
+        char command[28];
+        snprintf(command, sizeof(command), "steam://rungameid/%s", selected_game_id);
+        open_uri(command);
     } else {
         g_print("No game selected!\n");
     }
