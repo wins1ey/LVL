@@ -14,6 +14,8 @@ typedef struct {
     GtkWidget *stack;
     GtkWidget *game_list_box;
     GtkWidget *game_info_label;
+    GtkWidget *game_title_label;
+    GtkWidget *game_app_id_label;
     GtkWidget *run_command_button;
     GtkWidget *api_key_entry;
     GtkWidget *steam_id_entry;
@@ -154,12 +156,23 @@ void on_button_clicked(GtkWidget *widget, gpointer data)
 void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
 {
     if (!row) return;
+    AppWidgets *widgets = (AppWidgets *)data;
     gpointer game_id_ptr = g_object_get_data(G_OBJECT(row), "game_id");
+
     if (game_id_ptr != NULL) {
         int game_id = GPOINTER_TO_INT(game_id_ptr); // Convert back from pointer to integer
         printf("Selected game ID: %d\n", game_id);
         g_free((gchar*)selected_game_id);
         selected_game_id = g_strdup_printf("%d", game_id); // Store game ID as a string for other uses
+
+        const char *game_title_text = gtk_label_get_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(row))));
+        char *formatted_title = g_markup_printf_escaped("<span font='16'>%s</span>", game_title_text);
+        gtk_label_set_markup(GTK_LABEL(widgets->game_title_label), formatted_title);
+        g_free(formatted_title);
+
+        char *game_app_id = g_strdup_printf("Game App ID: %d", game_id);
+        gtk_label_set_text(GTK_LABEL(widgets->game_app_id_label), game_app_id);
+        g_free(game_app_id);
     }
 }
 
@@ -258,10 +271,23 @@ GtkWidget* create_library_page(AppWidgets *appWidgets)
     gtk_paned_add1(GTK_PANED(paned), scrolled_window);
 
     GtkWidget *info_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    appWidgets->game_info_label = gtk_label_new("Select a game from the list.");
-    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_info_label, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(info_vbox), 10);
+
+    // Game information labels
+    appWidgets->game_title_label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(appWidgets->game_title_label), "<span font='16'>Select a game</span>");
+    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_title_label, FALSE, FALSE, 0);
+    appWidgets->game_app_id_label = gtk_label_new(NULL);
+    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->game_app_id_label, FALSE, FALSE, 0);
+
+    // Spacer to push the button to the bottom
+    GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(info_vbox), spacer, TRUE, TRUE, 0);
+
+    // Play button
     appWidgets->run_command_button = gtk_button_new_with_label("Play");
-    gtk_box_pack_start(GTK_BOX(info_vbox), appWidgets->run_command_button, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(info_vbox), appWidgets->run_command_button, FALSE, FALSE, 0);
+
     gtk_paned_add2(GTK_PANED(paned), info_vbox);
 
     g_signal_connect(appWidgets->game_list_box, "row-selected", G_CALLBACK(on_game_selected), appWidgets);
