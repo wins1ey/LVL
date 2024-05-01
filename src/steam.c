@@ -8,12 +8,7 @@
 #include "steam.h"
 #include "db.h"
 
-typedef struct {
-    char *memory;
-    size_t size;
-} MemoryStruct;
-
-static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t real_size = size * nmemb;
     MemoryStruct *mem = (MemoryStruct *)userp;
