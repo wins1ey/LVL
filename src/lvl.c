@@ -22,6 +22,10 @@ typedef struct {
     GtkWidget *run_command_button;
     GtkWidget *api_key_entry;
     GtkWidget *steam_id_entry;
+    GtkWidget *game_name_entry;
+    GtkWidget *install_path_entry;
+    GtkWidget *playtime_entry;
+    GtkListBoxRow *selected_game_row;
 } AppWidgets;
 
 typedef struct {
@@ -107,7 +111,7 @@ void get_config_path(char *out_path)
 }
 
 // Initialize the database and load data
-int init_database(Steam *steam, const char *api_key, const char *steam_id)
+int init_database(Steam *steam)
 {
     get_config_path(steam->db_path);
     strcat(steam->db_path, "/steam_games.db");
@@ -116,12 +120,13 @@ int init_database(Steam *steam, const char *api_key, const char *steam_id)
         return 0;
     }
     create_table(steam->db);
-    fetch_data_from_steam_api(api_key, steam_id, steam->db);
+    create_non_steam_table(steam->db);
+
     return 1;
 }
 
 // Create a single row in the game list
-void create_game_row(int id, const char *name, int playtime, void *user_data)
+void create_game_row(int id, const char *name, const char *install_path, int playtime, void *user_data)
 {
     GtkWidget *game_list_box = (GtkWidget *)user_data;
     GtkWidget *row = gtk_list_box_row_new();
@@ -136,6 +141,7 @@ void create_game_row(int id, const char *name, int playtime, void *user_data)
     gtk_list_box_insert(GTK_LIST_BOX(game_list_box), row, -1);
     g_object_set_data(G_OBJECT(row), "game_id", GINT_TO_POINTER(id));
     g_object_set_data(G_OBJECT(row), "playtime", GINT_TO_POINTER(playtime));
+    g_object_set_data_full(G_OBJECT(row), "install_path", g_strdup(install_path), g_free);
 }
 
 void clear_game_list(GtkWidget *game_list_box) {
@@ -167,7 +173,7 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
     if (game_id_ptr != NULL) {
         int game_id = GPOINTER_TO_INT(game_id_ptr); // Convert back from pointer to integer
         int playtime = GPOINTER_TO_INT(playtime_ptr);
-        printf("Selected game ID: %d\n", game_id);
+        g_print("Selected game ID: %d\n", game_id);
         g_free((gchar*)selected_game_id);
         selected_game_id = g_strdup_printf("%d", game_id); // Store game ID as a string for other uses
 
@@ -185,10 +191,26 @@ void on_game_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data)
 // Execute a command for the selected game
 void on_run_command_clicked(GtkWidget *widget, gpointer data)
 {
-    if (selected_game_id) {
-        char command[28];
-        snprintf(command, sizeof(command), "steam://rungameid/%s", selected_game_id);
-        open_uri(command);
+    AppWidgets *widgets = (AppWidgets *)data;
+    GtkListBoxRow *selected_row = gtk_list_box_get_selected_row(GTK_LIST_BOX(widgets->game_list_box));
+
+    if (selected_row) {
+        int game_id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(selected_row), "game_id"));
+        char *install_path_ptr = g_object_get_data(G_OBJECT(selected_row), "install_path");
+
+        if (install_path_ptr && strlen(install_path_ptr) > 0) {
+            // Non-Steam game with a path
+            g_print("Running non-Steam game with command: %s\n", install_path_ptr);
+            system(install_path_ptr);
+        } else if (game_id) {
+            // It's a Steam game, execute the Steam URI
+            char command[256];
+            snprintf(command, sizeof(command), "steam://rungameid/%d", game_id);
+            g_print("Opening Steam game with ID: %d\n", game_id);
+            open_uri(command);
+        } else {
+            g_print("No valid command or game ID found!\n");
+        }
     } else {
         g_print("No game selected!\n");
     }
@@ -218,18 +240,45 @@ void on_save_settings_clicked(GtkWidget *widget, gpointer data)
 
     write_config(config_path, api_key, steam_id);
 
-    // Re-initialize the database with new API key and ID
-    if (!init_database(&steam, api_key, steam_id)) {
-        g_print("Failed to initialize database with new settings\n");
-        return;
-    }
+    fetch_data_from_steam_api(api_key, steam_id, steam.db);
 
     // Clear the existing list of games
     clear_game_list(widgets->game_list_box);
 
     // Fetch games with new API key and Steam ID and repopulate the list
-    db_fetch_games(steam.db_path, create_game_row, widgets->game_list_box);
+    db_fetch_all_games(steam.db_path, create_game_row, widgets->game_list_box);
     gtk_widget_show_all(widgets->window);
+}
+
+void on_add_game_clicked(GtkWidget *widget, gpointer data)
+{
+    AppWidgets *widgets = (AppWidgets *)data;
+    const char *game_name = gtk_entry_get_text(GTK_ENTRY(widgets->game_name_entry));
+    const char *install_path = gtk_entry_get_text(GTK_ENTRY(widgets->install_path_entry));
+    const char *playtime_str = gtk_entry_get_text(GTK_ENTRY(widgets->playtime_entry));
+
+    // Validate inputs (simplified check here, should be more robust)
+    if (!game_name || !*game_name || !install_path || !*install_path || !playtime_str || !*playtime_str) {
+        fprintf(stderr, "Invalid input\n");
+        return;
+    }
+
+    int playtime = atoi(playtime_str);
+
+    // Call to insert into database
+    insert_non_steam_game(steam.db, game_name, install_path, playtime);
+
+    printf("added game: %s\n", game_name);
+
+    // Clear the existing list of games
+    clear_game_list(widgets->game_list_box);
+
+    printf("cleared game list\n");
+
+    db_fetch_all_games(steam.db_path, create_game_row, widgets->game_list_box);
+    printf("fetched games\n");
+    gtk_widget_show_all(widgets->game_list_box);
+    printf("showed games\n");
 }
 
 // Initialize GTK and configure widgets
@@ -262,7 +311,7 @@ GtkWidget* create_about_page()
 
     // Title
     GtkWidget *title_label = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(title_label), "<span font='18' weight='bold'>LVL - Linux Video Game Launcher</span>");
+    gtk_label_set_markup(GTK_LABEL(title_label), "<span font='18' weight='bold'>LVL - Linux Video game Launcher</span>");
     gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
 
     // Version
@@ -302,7 +351,7 @@ GtkWidget* create_settings_page(AppWidgets *appWidgets)
     gtk_entry_set_placeholder_text(GTK_ENTRY(steam_id_entry), "Enter Steam ID");
     gtk_box_pack_start(GTK_BOX(vbox), steam_id_entry, FALSE, FALSE, 0);
 
-    GtkWidget *save_button = gtk_button_new_with_label("Save Settings");
+    GtkWidget *save_button = gtk_button_new_with_label("Save Steam Settings");
     gtk_box_pack_start(GTK_BOX(vbox), save_button, FALSE, FALSE, 0);
 
     // Save callback
@@ -310,6 +359,32 @@ GtkWidget* create_settings_page(AppWidgets *appWidgets)
 
     appWidgets->api_key_entry = api_key_entry;
     appWidgets->steam_id_entry = steam_id_entry;
+
+    // Entry for game name
+    GtkWidget *game_name_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(game_name_entry), "Enter Game Name");
+    gtk_box_pack_start(GTK_BOX(vbox), game_name_entry, FALSE, FALSE, 0);
+
+    // Entry for install path
+    GtkWidget *install_path_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(install_path_entry), "Enter Executable Path");
+    gtk_box_pack_start(GTK_BOX(vbox), install_path_entry, FALSE, FALSE, 0);
+
+    // Entry for playtime
+    GtkWidget *playtime_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(playtime_entry), "Enter Playtime in minutes");
+    gtk_box_pack_start(GTK_BOX(vbox), playtime_entry, FALSE, FALSE, 0);
+
+    // Button to add game
+    GtkWidget *add_game_button = gtk_button_new_with_label("Add Game");
+    gtk_box_pack_start(GTK_BOX(vbox), add_game_button, FALSE, FALSE, 0);
+
+    // Connect signals
+    g_signal_connect(add_game_button, "clicked", G_CALLBACK(on_add_game_clicked), appWidgets);
+
+    appWidgets->game_name_entry = game_name_entry;
+    appWidgets->install_path_entry = install_path_entry;
+    appWidgets->playtime_entry = playtime_entry;
 
     return vbox;
 }
@@ -344,7 +419,7 @@ GtkWidget* create_library_page(AppWidgets *appWidgets)
     gtk_paned_add2(GTK_PANED(paned), info_vbox);
 
     g_signal_connect(appWidgets->game_list_box, "row-selected", G_CALLBACK(on_game_selected), appWidgets);
-    g_signal_connect(appWidgets->run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), NULL);
+    g_signal_connect(appWidgets->run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), appWidgets);
 
     return paned;
 }
@@ -372,12 +447,6 @@ int main(int argc, char *argv[])
 {
     gtk_init(&argc, &argv);
 
-    char api_key[256], steam_id[256];
-    char config_path[PATH_MAX];
-    get_config_path(config_path);
-    sprintf(steam.db_path, "%s/steam_games.db", config_path);
-    strcat(config_path, "/config.txt");
-
     AppWidgets appWidgets;
     appWidgets.window = create_main_window();
     GtkWidget *stack = create_stack_with_pages(&appWidgets);
@@ -388,10 +457,14 @@ int main(int argc, char *argv[])
     gtk_box_pack_start(GTK_BOX(vbox), stack, TRUE, TRUE, 0);
 
     gtk_container_add(GTK_CONTAINER(appWidgets.window), vbox);
+    
+    char api_key[256], steam_id[256];
+    char config_path[PATH_MAX];
+    get_config_path(config_path);
+    sprintf(steam.db_path, "%s/steam_games.db", config_path);
 
-    if (read_config(config_path, api_key, steam_id)) {
-        db_fetch_games(steam.db_path, create_game_row, appWidgets.game_list_box);
-    }
+    init_database(&steam);
+    db_fetch_all_games(steam.db_path, create_game_row, appWidgets.game_list_box);
 
     gtk_widget_show_all(appWidgets.window);
     gtk_main();
