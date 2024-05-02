@@ -25,6 +25,7 @@ typedef struct {
     GtkWidget *game_name_entry;
     GtkWidget *install_path_entry;
     GtkWidget *playtime_entry;
+    GtkWidget *search_entry;
     GtkListBoxRow *selected_game_row;
 } AppWidgets;
 
@@ -148,11 +149,51 @@ void clear_game_list(GtkWidget *game_list_box) {
     gtk_container_foreach(GTK_CONTAINER(game_list_box), (GtkCallback)gtk_widget_destroy, NULL);
 }
 
+// Function to filter game list based on search input
+static gboolean filter_games(GtkListBoxRow *row, gpointer data)
+{
+    const gchar *search_text = (const gchar *)data;
+    if (!search_text || g_strcmp0(search_text, "") == 0) {
+        return TRUE;  // Show all rows if search text is empty
+    }
+
+    GtkWidget *label = gtk_bin_get_child(GTK_BIN(row));
+    const gchar *game_name = gtk_label_get_text(GTK_LABEL(label));
+    if (!game_name) {
+        return FALSE;
+    }
+
+    // Use case-insensitive comparison
+    gchar *lower_game_name = g_utf8_strdown(game_name, -1);
+    gchar *lower_search_text = g_utf8_strdown(search_text, -1);
+    gboolean contains = strstr(lower_game_name, lower_search_text) != NULL;
+
+    g_free(lower_game_name);
+    g_free(lower_search_text);
+
+    return contains;
+}
+
 // Callback to quit GTK main loop
 void on_window_destroy(GtkWidget *widget, gpointer data)
 {
     gtk_main_quit();
 }
+
+// Callback to update the filter whenever the search text changes
+static void on_search_entry_text_changed(GtkEntry *entry, gpointer data)
+{
+    AppWidgets *appWidgets = (AppWidgets *)data;
+    if (!GTK_IS_SEARCH_ENTRY(entry) || !GTK_IS_LIST_BOX(appWidgets->game_list_box)) {
+        g_warning("Invalid widget types or null pointers in search entry callback");
+        return;
+    }
+
+    const gchar *text = gtk_entry_get_text(entry); // Use 'entry' instead of 'widget'
+    gtk_list_box_set_filter_func(GTK_LIST_BOX(appWidgets->game_list_box), filter_games, (gpointer)text, NULL);
+    gtk_list_box_invalidate_filter(GTK_LIST_BOX(appWidgets->game_list_box));
+}
+
 
 // Navigation button callback
 void on_button_clicked(GtkWidget *widget, gpointer data)
@@ -391,13 +432,31 @@ GtkWidget* create_settings_page(AppWidgets *appWidgets)
 
 GtkWidget* create_library_page(AppWidgets *appWidgets)
 {
+    // Create the main vertical box for this page
+    GtkWidget *vbox_main = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Create a horizontal paned widget
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+
+    // Create a vertical box to hold the search entry and the game list
+    GtkWidget *vbox_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    // Create and set up the search entry
+    appWidgets->search_entry = gtk_search_entry_new();
+    gtk_box_pack_start(GTK_BOX(vbox_list), appWidgets->search_entry, FALSE, FALSE, 0);
+    g_signal_connect(appWidgets->search_entry, "changed", G_CALLBACK(on_search_entry_text_changed), appWidgets);
+
+    // Create the game list box and a scrolled window for it
     appWidgets->game_list_box = gtk_list_box_new();
     GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add(GTK_CONTAINER(scrolled_window), appWidgets->game_list_box);
-    gtk_paned_add1(GTK_PANED(paned), scrolled_window);
+    gtk_box_pack_start(GTK_BOX(vbox_list), scrolled_window, TRUE, TRUE, 0);
 
+    // Add the box that contains the search entry and the list box to the first pane
+    gtk_paned_add1(GTK_PANED(paned), vbox_list);
+
+    // Create a vertical box for game information display
     GtkWidget *info_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(info_vbox), 10);
 
@@ -411,17 +470,21 @@ GtkWidget* create_library_page(AppWidgets *appWidgets)
     // Spacer to push the button to the bottom
     GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(info_vbox), spacer, TRUE, TRUE, 0);
-
     // Play button
     appWidgets->run_command_button = gtk_button_new_with_label("Play");
     gtk_box_pack_end(GTK_BOX(info_vbox), appWidgets->run_command_button, FALSE, FALSE, 0);
 
+    // Add the game info box to the second pane
     gtk_paned_add2(GTK_PANED(paned), info_vbox);
 
+    // Add the paned widget to the main vbox
+    gtk_box_pack_start(GTK_BOX(vbox_main), paned, TRUE, TRUE, 0);
+
+    // Connect signals
     g_signal_connect(appWidgets->game_list_box, "row-selected", G_CALLBACK(on_game_selected), appWidgets);
     g_signal_connect(appWidgets->run_command_button, "clicked", G_CALLBACK(on_run_command_clicked), appWidgets);
 
-    return paned;
+    return vbox_main;
 }
 
 GtkWidget* create_stack_with_pages(AppWidgets *appWidgets)
