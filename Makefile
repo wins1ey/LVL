@@ -9,6 +9,8 @@ PREFIX := /usr/local
 SRC_DIR := ./src
 OBJ_DIR := ./obj
 
+APP := lvl.desktop
+
 SRC := $(wildcard $(SRC_DIR)/*.c)
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC))
 
@@ -25,9 +27,11 @@ $(OBJ_DIR):
 
 install: all
 	install -Dm755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+	install -Dm644 $(APP) $(DESTDIR)$(PREFIX)/share/applications/$(APP)
 
 uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+	$(RM) $(DESTDIR)$(PREFIX)/share/applications/$(APP)
 
 clean:
 	$(RM) -r $(BIN) $(OBJ_DIR)
