@@ -32,9 +32,9 @@ typedef struct {
 typedef struct {
     sqlite3 *db;
     char db_path[PATH_MAX];
-} Steam;
+} DB_Config;
 
-Steam steam;
+DB_Config db_config;
 
 const gchar *selected_game_id = NULL;
 
@@ -103,25 +103,25 @@ void get_config_path(char *out_path)
     const char *XDG_CONFIG_HOME = getenv("XDG_CONFIG_HOME");
     if (XDG_CONFIG_HOME) {
         strcpy(out_path, XDG_CONFIG_HOME);
-        strcat(out_path, "/lvl");
+        strcat(out_path, "/LVL");
     } else {
         strcpy(out_path, pw->pw_dir);
-        strcat(out_path, "/.config/lvl");
+        strcat(out_path, "/.config/LVL");
     }
     mkdir_p(out_path, 0700);
 }
 
 // Initialize the database and load data
-int init_database(Steam *steam)
+int init_database(DB_Config *db_config)
 {
-    get_config_path(steam->db_path);
-    strcat(steam->db_path, "/steam_games.db");
-    if (sqlite3_open(steam->db_path, &steam->db)) {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(steam->db));
+    get_config_path(db_config->db_path);
+    strcat(db_config->db_path, "/games.db");
+    if (sqlite3_open(db_config->db_path, &db_config->db)) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db_config->db));
         return 0;
     }
-    create_table(steam->db);
-    create_non_steam_table(steam->db);
+    create_table(db_config->db);
+    create_non_steam_table(db_config->db);
 
     return 1;
 }
@@ -281,13 +281,13 @@ void on_save_settings_clicked(GtkWidget *widget, gpointer data)
 
     write_config(config_path, api_key, steam_id);
 
-    fetch_data_from_steam_api(api_key, steam_id, steam.db);
+    fetch_data_from_steam_api(api_key, steam_id, db_config.db);
 
     // Clear the existing list of games
     clear_game_list(widgets->game_list_box);
 
     // Fetch games with new API key and Steam ID and repopulate the list
-    db_fetch_all_games(steam.db_path, create_game_row, widgets->game_list_box);
+    db_fetch_all_games(db_config.db_path, create_game_row, widgets->game_list_box);
     gtk_widget_show_all(widgets->window);
 }
 
@@ -307,7 +307,7 @@ void on_add_game_clicked(GtkWidget *widget, gpointer data)
     int playtime = atoi(playtime_str);
 
     // Call to insert into database
-    insert_non_steam_game(steam.db, game_name, install_path, playtime);
+    insert_non_steam_game(db_config.db, game_name, install_path, playtime);
 
     printf("added game: %s\n", game_name);
 
@@ -316,7 +316,7 @@ void on_add_game_clicked(GtkWidget *widget, gpointer data)
 
     printf("cleared game list\n");
 
-    db_fetch_all_games(steam.db_path, create_game_row, widgets->game_list_box);
+    db_fetch_all_games(db_config.db_path, create_game_row, widgets->game_list_box);
     printf("fetched games\n");
     gtk_widget_show_all(widgets->game_list_box);
     printf("showed games\n");
@@ -524,15 +524,15 @@ int main(int argc, char *argv[])
     char api_key[256], steam_id[256];
     char config_path[PATH_MAX];
     get_config_path(config_path);
-    sprintf(steam.db_path, "%s/steam_games.db", config_path);
+    sprintf(db_config.db_path, "%s/games.db", config_path);
 
-    init_database(&steam);
-    db_fetch_all_games(steam.db_path, create_game_row, appWidgets.game_list_box);
+    init_database(&db_config);
+    db_fetch_all_games(db_config.db_path, create_game_row, appWidgets.game_list_box);
 
     gtk_widget_show_all(appWidgets.window);
     gtk_main();
 
-    sqlite3_close(steam.db);
+    sqlite3_close(db_config.db);
 
     return 0;
 }

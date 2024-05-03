@@ -23,7 +23,7 @@ void create_table(sqlite3 *db)
     int rc;
     char *sql;
 
-    sql = "CREATE TABLE IF NOT EXISTS games(" \
+    sql = "CREATE TABLE IF NOT EXISTS steam_games(" \
           "game_id INTEGER PRIMARY KEY," \
           "game_name TEXT NOT NULL," \
           "playtime INTEGER DEFAULT 0);";  // playtime in minutes
@@ -61,7 +61,7 @@ void insert_game(sqlite3 *db, int game_id, const char *game_name, int playtime)
     char *zErrMsg = 0;
     int rc;
     sqlite3_stmt *stmt;
-    const char *sql = "INSERT OR IGNORE INTO games (game_id, game_name, playtime) VALUES (?, ?, ?);";
+    const char *sql = "INSERT OR IGNORE INTO steam_games (game_id, game_name, playtime) VALUES (?, ?, ?);";
 
     // Prepare the statement
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
@@ -121,7 +121,7 @@ void db_fetch_all_games(const char *db_path, DBRowCallback callback, void *user_
     sqlite3_stmt *stmt;
     const char *sql = "SELECT game_id, game_name, install_path, playtime FROM non_steam_games "
                       "UNION ALL "
-                      "SELECT game_id, game_name, NULL AS install_path, playtime FROM games "
+                      "SELECT game_id, game_name, NULL AS install_path, playtime FROM steam_games "
                       "ORDER BY game_name ASC";
     int rc;
 
